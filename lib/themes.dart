@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:wallet_app/widgets/custom_color.dart';
 
 final lightTheme = ThemeData(
   useMaterial3: true,
@@ -16,6 +17,7 @@ final lightTheme = ThemeData(
   ),
   elevatedButtonTheme: const ElevatedButtonThemeData(style: ButtonStyle()),
   brightness: Brightness.light,
+  extensions: [lightCustomColors]
 );
 
 final darkTheme = ThemeData(
@@ -34,4 +36,5 @@ final darkTheme = ThemeData(
   ),
   elevatedButtonTheme: const ElevatedButtonThemeData(style: ButtonStyle()),
   brightness: Brightness.dark,
+  extensions: [darkCustomColors]
 );

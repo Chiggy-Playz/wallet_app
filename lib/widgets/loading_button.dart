@@ -37,7 +37,7 @@ class _LoadingButtonState extends State<LoadingButton>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _tween,
-      builder: (context, child) => ElevatedButton(
+      builder: (context, child) => FilledButton(
         style: Theme.of(context).elevatedButtonTheme.style!.copyWith(
               minimumSize: MaterialStatePropertyAll(
                 Size(_tween.value.w, 8.h),

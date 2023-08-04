@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
-import 'package:wallet_app/providers/hive.dart';
 import 'package:wallet_app/providers/wallet_services.dart';
-import 'package:wallet_app/transactions_widget.dart';
+import 'package:wallet_app/transactions_list.dart';
+import 'package:wallet_app/utility.dart';
 import 'package:wallet_app/widgets/loading_button.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:flutter/services.dart';
@@ -17,14 +17,6 @@ class HomePage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Wallet'),
         centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: () async {
-              await ref.read(walletServicesProvider.notifier).refreshBalance();
-            },
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: const HomeWidget(),
     );
@@ -42,49 +34,94 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
   @override
   Widget build(BuildContext context) {
     double balance = ref.watch(walletServicesProvider);
+    String address = ref.watch(walletServicesProvider.notifier).creds!.address;
 
-    return Center(
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(walletServicesProvider.notifier).getTransactions();
+        await ref.read(walletServicesProvider.notifier).refreshBalance();
+      },
+      child: ListView(
         children: [
-          SizedBox(
-            height: 10.h,
-          ),
-          ElevatedButton(
-            style: ButtonStyle(
-              minimumSize: MaterialStatePropertyAll(
-                Size(60.w, 5.h),
-              ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 2.h,
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Address: ",
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    SizedBox(width: 1.w),
+                    ElevatedButton(
+                      onPressed: () async {
+                        var addressHex = ref
+                            .read(walletServicesProvider.notifier)
+                            .creds!
+                            .address;
+                        await Clipboard.setData(
+                            ClipboardData(text: addressHex));
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Copied to clipboard"),
+                          ),
+                        );
+                      },
+                      child: Text(shortenAddress(address)),
+                    )
+                  ],
+                ),
+                SizedBox(
+                  height: 2.h,
+                ),
+                Text(
+                  "Balance",
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                SizedBox(
+                  height: 1.h,
+                ),
+                Text(
+                  "${balance.toStringAsPrecision(5)} SEPETH",
+                  style: Theme.of(context).textTheme.displaySmall,
+                ),
+                SizedBox(
+                  height: 5.h,
+                ),
+                FilledButton(
+                  style: ButtonStyle(
+                    minimumSize: MaterialStatePropertyAll(
+                      Size(60.w, 5.h),
+                    ),
+                  ),
+                  onPressed: sendClicked,
+                  child: const Text("Send"),
+                ),
+                SizedBox(
+                  height: 1.h,
+                ),
+                FilledButton(
+                  style: ButtonStyle(
+                    minimumSize: MaterialStatePropertyAll(
+                      Size(60.w, 5.h),
+                    ),
+                  ),
+                  onPressed: receiveClicked,
+                  child: const Text("Receive"),
+                ),
+                SizedBox(
+                  height: 5.h,
+                ),
+                const TransactionsListWidget(),
+              ],
             ),
-            onPressed: sendClicked,
-            child: const Text("Send"),
           ),
-          SizedBox(
-            height: 1.h,
-          ),
-          ElevatedButton(
-            style: ButtonStyle(
-              minimumSize: MaterialStatePropertyAll(
-                Size(60.w, 5.h),
-              ),
-            ),
-            onPressed: receiveClicked,
-            child: const Text("Receive"),
-          ),
-          SizedBox(
-            height: 5.h,
-          ),
-          Text(
-            "Balance",
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          SizedBox(
-            height: 1.h,
-          ),
-          Text(
-            "${balance.toStringAsPrecision(5)} SEPETH",
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
-          const TransactionsWidget(),
         ],
       ),
     );
@@ -131,9 +168,6 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
                         .read(walletServicesProvider.notifier)
                         .creds!
                         .address),
-                // SizedBox(
-                //   height: 5.h,
-                // ),
                 TextButton(
                     onPressed: copyToClipboard,
                     child: const Text("Copy to clipboard"))
@@ -146,10 +180,9 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
   }
 
   Future<void> copyToClipboard() async {
-    // Removing 0x
     var addressHex = ref.read(walletServicesProvider.notifier).creds!.address;
     await Clipboard.setData(ClipboardData(text: addressHex));
-    if (!context.mounted) return;
+    if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

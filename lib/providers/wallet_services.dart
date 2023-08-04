@@ -1,20 +1,27 @@
-// ignore_for_file: avoid_print
 import 'dart:math';
+import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:wallet_app/constants.dart';
+import 'package:wallet_app/providers/dio.dart';
 import 'package:wallet_app/providers/hive.dart';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart' as web3;
+import 'package:web_socket_channel/io.dart';
 import '../models/credentials.dart';
 // ignore: depend_on_referenced_packages
 import 'package:http/http.dart';
+
+import '../models/transaction.dart';
 
 part 'wallet_services.g.dart';
 
 @Riverpod(keepAlive: true)
 class WalletServices extends _$WalletServices {
+  late web3.Web3Client client;
   double balance = 0.00;
   Credentials? creds;
+  List<Transaction> transactions = [];
+  List<Transaction> pendingTransactions = [];
 
   @override
   double build() {
@@ -29,18 +36,13 @@ class WalletServices extends _$WalletServices {
     var privateKey = random.privateKey;
 
     var privateKeyHex = bytesToHex(privateKey).split('').reversed.join('');
-    print(privateKeyHex.length);
 
     // Making sure privateKeyHex has exactly 64 characters
     if (privateKeyHex.length > 64) {
       privateKeyHex = privateKeyHex.substring(0, 64);
-      print(privateKeyHex.length);
     }
     privateKeyHex = privateKeyHex.split('').reversed.join('');
     var addressHex = address.hex;
-
-    print("$addressHex --- ${bytesToHex(privateKey)}");
-    print(privateKeyHex);
 
     await (await ref.read(hiveDbProvider.future))
         .saveCredentials(privateKeyHex, addressHex);
@@ -50,11 +52,15 @@ class WalletServices extends _$WalletServices {
   }
 
   Future<double> intialize() async {
+    client = web3.Web3Client(SEPOLIA_RPC_URL, Client());
+
     creds = await (await ref.read(hiveDbProvider.future)).getCredentials();
     if (creds == null) {
       await createWallet();
     }
     await refreshBalance();
+
+    loop();
     state = balance;
     return balance;
   }
@@ -63,7 +69,6 @@ class WalletServices extends _$WalletServices {
     if (creds == null) {
       return 0.00;
     }
-    final client = web3.Web3Client(SEPOLIA_RPC_URL, Client());
     final credentials = web3.EthPrivateKey.fromHex(creds!.privateKeyHex);
     final address = credentials.address;
     final val = await client.getBalance(address);
@@ -73,53 +78,76 @@ class WalletServices extends _$WalletServices {
   }
 
   Future<void> sendTransaction(String toAdress, double value) async {
-    final client = web3.Web3Client(SEPOLIA_RPC_URL, Client());
-    
     final credentials = web3.EthPrivateKey.fromHex(creds!.privateKeyHex);
-    final address = credentials.address;
     final BigInt amo = BigInt.from(value * 1000000000000000000);
-    print(address.hexEip55);
-    print(amo);
-    print(credentials.privateKey);
-    print(await client.getGasPrice());
-    print(await client.getBalance(address));
+
     var transaction = web3.Transaction(
         to: web3.EthereumAddress.fromHex(toAdress),
         value: web3.EtherAmount.fromBigInt(web3.EtherUnit.wei, amo));
     final supply = await client.signTransaction(credentials, transaction,
         chainId: 11155111);
-    final result = await client.sendRawTransaction(supply);
-    print(result);
-    print(await client.getTransactionCount(address));
-    // getTransections();
+    String transactionHash = await client.sendRawTransaction(supply);
+    transactions.insert(
+      0,
+      Transaction(
+          hash: transactionHash,
+          from: creds!.address,
+          to: toAdress,
+          value: value,
+          timestamp: DateTime.now(),
+          type: TransactionType.pending),
+    );
+    var transactionReceipt =
+        await client.getTransactionReceipt(transactionHash);
+    print(transactionReceipt);
+    transactions[0].type = TransactionType.sent;
     await refreshBalance();
-    await client.dispose();
   }
 
-  // void getTransections() async {
-  //   final url =
-  //       'https://deep-index.moralis.io/api/v2/${creds!.address}/verbose?chain=sepolia';
+  Future<void> getTransactions() async {
+    final url =
+        'https://deep-index.moralis.io/api/v2/${creds!.address}/verbose?chain=sepolia';
 
-  //   try {
-  //     // Send the HTTP GET request with the required headers
-  //     final response = await get(
-  //       Uri.parse(url),
-  //       headers: {
-  //         'accept': 'application/json',
-  //         'X-API-Key': MORALIS_API_KEY,
-  //       },
-  //     );
+    try {
+      // Send the HTTP GET request with the required headers
+      final response = await ref.read(dioProvider).get(
+            url,
+            options: Options(
+              headers: {
+                'accept': 'application/json',
+                'X-API-Key': MORALIS_API_KEY,
+              },
+            ),
+          );
 
-  //     if (response.statusCode == 200) {
-  //       // Parse the JSON response
-  //       print('Response: ${response.body}');
-  //       list = Transect.fromJson(json.decode(response.body));
-  //       print(list!.result!.length);
-  //     } else {
-  //       print('Request failed with status code: ${response.statusCode}');
-  //     }
-  //   } catch (e) {
-  //     print('Error sending request: $e');
-  //   }
-  // }
+      if (response.statusCode != 200) {
+        transactions = [];
+        return;
+      }
+
+      // Convert and return the response as a List of Transactions
+      final data = response.data['result'];
+      transactions = List<Transaction>.from(
+        data.map(
+          (transaction) => Transaction(
+            hash: transaction['hash'],
+            from: transaction['from_address'],
+            to: transaction['to_address'],
+            // Convert value from wei to ether
+            value: BigInt.from(double.parse(transaction['value'])) /
+                BigInt.from(1000000000000000000),
+            timestamp: DateTime.parse(transaction['block_timestamp']),
+            type: transaction['from_address'] == creds!.address
+                ? TransactionType.sent
+                : TransactionType.received,
+          ),
+        ),
+      );
+    } catch (e) {
+      // Rip
+      print("Died lmao $e");
+    }
+  }
+
+  Future<void> loop() async {}
 }
