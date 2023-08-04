@@ -33,13 +33,13 @@ class HomeWidget extends ConsumerStatefulWidget {
 class _HomeWidgetState extends ConsumerState<HomeWidget> {
   @override
   Widget build(BuildContext context) {
-    double balance = ref.watch(walletServicesProvider);
-    String address = ref.watch(walletServicesProvider.notifier).creds!.address;
+    double balance = ref.watch(balanceProvider);
+    String address = ref.watch(walletServicesProvider).creds!.address;
 
     return RefreshIndicator(
       onRefresh: () async {
-        await ref.read(walletServicesProvider.notifier).getTransactions();
-        await ref.read(walletServicesProvider.notifier).refreshBalance();
+        await ref.read(transactionsProvider.notifier).getTransactions();
+        await ref.read(balanceProvider.notifier).refreshBalance();
       },
       child: ListView(
         children: [
@@ -61,7 +61,7 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
                     ElevatedButton(
                       onPressed: () async {
                         var addressHex = ref
-                            .read(walletServicesProvider.notifier)
+                            .read(walletServicesProvider)
                             .creds!
                             .address;
                         await Clipboard.setData(
@@ -165,7 +165,7 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
                     elementColor: Theme.of(context).colorScheme.onBackground,
                     size: 70.w,
                     data: ref
-                        .read(walletServicesProvider.notifier)
+                        .read(walletServicesProvider)
                         .creds!
                         .address),
                 TextButton(
@@ -180,7 +180,7 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
   }
 
   Future<void> copyToClipboard() async {
-    var addressHex = ref.read(walletServicesProvider.notifier).creds!.address;
+    var addressHex = ref.read(walletServicesProvider).creds!.address;
     await Clipboard.setData(ClipboardData(text: addressHex));
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -232,7 +232,7 @@ class _SendModalWidgetState extends ConsumerState<SendModalWidget> {
                 alignment: Alignment.centerRight,
                 child: Chip(
                   label: Text(
-                      "Balance: ${ref.read(walletServicesProvider.notifier).balance}"),
+                      "Balance: ${ref.watch(balanceProvider)}"),
                 ),
               ),
             ],
@@ -275,7 +275,7 @@ class _SendModalWidgetState extends ConsumerState<SendModalWidget> {
                       return "Please enter a valid amount";
                     }
                     if (amount >
-                        ref.read(walletServicesProvider.notifier).balance) {
+                        ref.read(balanceProvider)) {
                       return "Insufficient balance";
                     }
                     if (amount <= 0) {
@@ -315,10 +315,10 @@ class _SendModalWidgetState extends ConsumerState<SendModalWidget> {
     });
 
     await ref
-        .read(walletServicesProvider.notifier)
+        .read(transactionsProvider.notifier)
         .sendTransaction(_toAddress, _amount);
 
-    if (!context.mounted) return;
+    if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

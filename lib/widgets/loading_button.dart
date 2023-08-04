@@ -48,12 +48,14 @@ class _LoadingButtonState extends State<LoadingButton>
           duration: const Duration(milliseconds: 500),
           child: _loading
               ? CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.onPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 )
               : Text(
                   widget.label,
-                  style: Theme.of(context).textTheme.headlineMedium!.copyWith(
-                      color: Theme.of(context).colorScheme.onBackground),
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineMedium!
+                      .copyWith(color: Theme.of(context).colorScheme.onPrimary),
                 ),
         ),
       ),

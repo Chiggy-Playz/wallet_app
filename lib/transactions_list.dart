@@ -31,7 +31,7 @@ class _TransactionsListWidgetState
             ),
             FutureBuilder(
               future:
-                  ref.watch(walletServicesProvider.notifier).getTransactions(),
+                  ref.watch(transactionsProvider.notifier).getTransactions(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.done) {
                   return transactionsList();
@@ -51,8 +51,8 @@ class _TransactionsListWidgetState
   }
 
   Widget transactionsList() {
-    var transactions = ref.watch(walletServicesProvider.notifier).transactions;
-    var address = ref.watch(walletServicesProvider.notifier).creds?.address;
+    var transactions = ref.watch(transactionsProvider);
+    var address = ref.watch(walletServicesProvider).creds!.address;
 
     if (transactions.isEmpty) {
       return const Center(child: Text("No transactions yet"));

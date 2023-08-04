@@ -11,10 +11,9 @@ class LoadingPage extends ConsumerStatefulWidget {
 }
 
 class _LoadingPageState extends ConsumerState<LoadingPage> {
-  
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<double>(
+    return FutureBuilder<Wallet>(
       future: ref.watch(walletServicesProvider.notifier).intialize(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.done) {

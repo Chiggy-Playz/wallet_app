@@ -6,7 +6,6 @@ import 'package:wallet_app/providers/dio.dart';
 import 'package:wallet_app/providers/hive.dart';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart' as web3;
-import 'package:web_socket_channel/io.dart';
 import '../models/credentials.dart';
 // ignore: depend_on_referenced_packages
 import 'package:http/http.dart';
@@ -15,20 +14,25 @@ import '../models/transaction.dart';
 
 part 'wallet_services.g.dart';
 
+class Wallet {
+  web3.Web3Client client;
+  Credentials? creds;
+
+  Wallet(this.client);
+
+  void setCredentials(Credentials creds) {
+    this.creds = creds;
+  }
+}
+
 @Riverpod(keepAlive: true)
 class WalletServices extends _$WalletServices {
-  late web3.Web3Client client;
-  double balance = 0.00;
-  Credentials? creds;
-  List<Transaction> transactions = [];
-  List<Transaction> pendingTransactions = [];
-
   @override
-  double build() {
-    return state;
+  Wallet build() {
+    return Wallet(web3.Web3Client(SEPOLIA_RPC_URL, Client()));
   }
 
-  Future<void> createWallet() async {
+  Future<Credentials> createWallet() async {
     var rng = Random.secure();
     var random = web3.EthPrivateKey.createRandom(rng);
 
@@ -46,67 +50,86 @@ class WalletServices extends _$WalletServices {
 
     await (await ref.read(hiveDbProvider.future))
         .saveCredentials(privateKeyHex, addressHex);
+    await ref.watch(balanceProvider.notifier).refreshBalance();
 
-    creds = Credentials(privateKeyHex: privateKeyHex, address: addressHex);
-    await refreshBalance();
+    return Credentials(privateKeyHex: privateKeyHex, address: addressHex);
   }
 
-  Future<double> intialize() async {
-    client = web3.Web3Client(SEPOLIA_RPC_URL, Client());
+  Future<Wallet> intialize() async {
+    var client = web3.Web3Client(SEPOLIA_RPC_URL, Client());
 
-    creds = await (await ref.read(hiveDbProvider.future)).getCredentials();
-    if (creds == null) {
-      await createWallet();
-    }
-    await refreshBalance();
-
+    var creds = await (await ref.read(hiveDbProvider.future)).getCredentials();
+    creds ??= await createWallet();
+    state = Wallet(client);
+    state.setCredentials(creds);
+    await ref.watch(balanceProvider.notifier).refreshBalance();
     loop();
-    state = balance;
-    return balance;
+    return state;
+  }
+
+  Future<void> loop() async {}
+}
+
+@Riverpod(keepAlive: true)
+class Balance extends _$Balance {
+  @override
+  double build() {
+    return 0.00;
   }
 
   Future<double> refreshBalance() async {
-    if (creds == null) {
+    Wallet wallet = ref.watch(walletServicesProvider);
+    if (wallet.creds == null) {
       return 0.00;
     }
-    final credentials = web3.EthPrivateKey.fromHex(creds!.privateKeyHex);
+    final credentials = web3.EthPrivateKey.fromHex(wallet.creds!.privateKeyHex);
     final address = credentials.address;
-    final val = await client.getBalance(address);
-    balance = val.getInWei / BigInt.from(1000000000000000000);
-    state = balance;
-    return balance;
+    final val = await wallet.client.getBalance(address);
+    state = val.getInWei / BigInt.from(1000000000000000000);
+    return state;
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Transactions extends _$Transactions {
+  @override
+  List<Transaction> build() {
+    return [];
   }
 
   Future<void> sendTransaction(String toAdress, double value) async {
-    final credentials = web3.EthPrivateKey.fromHex(creds!.privateKeyHex);
+    Wallet wallet = ref.watch(walletServicesProvider);
+    final credentials = web3.EthPrivateKey.fromHex(wallet.creds!.privateKeyHex);
     final BigInt amo = BigInt.from(value * 1000000000000000000);
 
     var transaction = web3.Transaction(
         to: web3.EthereumAddress.fromHex(toAdress),
         value: web3.EtherAmount.fromBigInt(web3.EtherUnit.wei, amo));
-    final supply = await client.signTransaction(credentials, transaction,
-        chainId: 11155111);
-    String transactionHash = await client.sendRawTransaction(supply);
-    transactions.insert(
+    final supply = await wallet.client
+        .signTransaction(credentials, transaction, chainId: 11155111);
+    String transactionHash = await wallet.client.sendRawTransaction(supply);
+    state.insert(
       0,
       Transaction(
           hash: transactionHash,
-          from: creds!.address,
+          from: wallet.creds!.address,
           to: toAdress,
           value: value,
           timestamp: DateTime.now(),
           type: TransactionType.pending),
     );
     var transactionReceipt =
-        await client.getTransactionReceipt(transactionHash);
+        await wallet.client.getTransactionReceipt(transactionHash);
     print(transactionReceipt);
-    transactions[0].type = TransactionType.sent;
-    await refreshBalance();
+    state[0].type = TransactionType.sent;
+    await ref.watch(balanceProvider.notifier).refreshBalance();
   }
 
   Future<void> getTransactions() async {
+    Wallet wallet = ref.watch(walletServicesProvider);
+
     final url =
-        'https://deep-index.moralis.io/api/v2/${creds!.address}/verbose?chain=sepolia';
+        'https://deep-index.moralis.io/api/v2/${wallet.creds!.address}/verbose?chain=sepolia';
 
     try {
       // Send the HTTP GET request with the required headers
@@ -121,13 +144,13 @@ class WalletServices extends _$WalletServices {
           );
 
       if (response.statusCode != 200) {
-        transactions = [];
+        state = [];
         return;
       }
 
       // Convert and return the response as a List of Transactions
       final data = response.data['result'];
-      transactions = List<Transaction>.from(
+      state = List<Transaction>.from(
         data.map(
           (transaction) => Transaction(
             hash: transaction['hash'],
@@ -137,17 +160,15 @@ class WalletServices extends _$WalletServices {
             value: BigInt.from(double.parse(transaction['value'])) /
                 BigInt.from(1000000000000000000),
             timestamp: DateTime.parse(transaction['block_timestamp']),
-            type: transaction['from_address'] == creds!.address
+            type: transaction['from_address'] == wallet.creds!.address
                 ? TransactionType.sent
                 : TransactionType.received,
           ),
         ),
-      );
+      )..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     } catch (e) {
       // Rip
       print("Died lmao $e");
     }
   }
-
-  Future<void> loop() async {}
 }
