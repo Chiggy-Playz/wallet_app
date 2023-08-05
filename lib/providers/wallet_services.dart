@@ -123,7 +123,7 @@ class Transactions extends _$Transactions {
     await ref.watch(balanceProvider.notifier).refreshBalance();
   }
 
-  Future<void> getTransactions() async {
+  Future<void> refreshTransactions() async {
     Wallet wallet = ref.watch(walletServicesProvider);
 
     final url =
@@ -188,5 +188,37 @@ class Transactions extends _$Transactions {
       // Rip
       print("Died lmao $e");
     }
+  }
+}
+
+@Riverpod(keepAlive: true)
+class Refresh extends _$Refresh {
+  @override
+  bool build() {
+    return false;
+  }
+
+  Future<void> refresh() async {
+    // Already refreshing
+    if (state) return;
+
+    var oldBalance = ref.read(balanceProvider);
+    var newBalance = await ref.read(balanceProvider.notifier).refreshBalance();
+
+    // If balance changed, refresh transactions
+    // Compare if absolute value of difference is greater than 0.0001
+    if ((newBalance - oldBalance).abs() > 0.001) {
+      // Yes refreshing
+      state = true;
+      // Wait 5 seconds for transaction to register on the blockchain
+      await Future.delayed(const Duration(seconds: 5));
+      await ref.read(transactionsProvider.notifier).refreshTransactions();
+    } else {
+      // Wait for like at least 1 second to show the loading bar kekw
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // No longer refreshing
+    state = false;
   }
 }

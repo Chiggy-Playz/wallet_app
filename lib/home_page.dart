@@ -32,21 +32,35 @@ class HomeWidget extends ConsumerStatefulWidget {
 
 class _HomeWidgetState extends ConsumerState<HomeWidget> {
   @override
+  void initState() {
+    // Setup a loop
+
+    Future.delayed(const Duration(milliseconds: 0), () async {
+      await ref.read(transactionsProvider.notifier).refreshTransactions();
+      while (true) {
+        await ref.read(refreshProvider.notifier).refresh();
+        await Future.delayed(const Duration(seconds: 5));
+      }
+    });
+
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
     double balance = ref.watch(balanceProvider);
     String address = ref.watch(walletServicesProvider).creds!.address;
+    bool refreshing = ref.watch(refreshProvider);
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await ref.read(transactionsProvider.notifier).getTransactions();
-        await ref.read(balanceProvider.notifier).refreshBalance();
-      },
+      onRefresh: ref.read(refreshProvider.notifier).refresh,
       child: ListView(
         children: [
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (refreshing) const LinearProgressIndicator(),
                 SizedBox(
                   height: 2.h,
                 ),
@@ -60,10 +74,8 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
                     SizedBox(width: 1.w),
                     ElevatedButton(
                       onPressed: () async {
-                        var addressHex = ref
-                            .read(walletServicesProvider)
-                            .creds!
-                            .address;
+                        var addressHex =
+                            ref.read(walletServicesProvider).creds!.address;
                         await Clipboard.setData(
                             ClipboardData(text: addressHex));
                         if (!mounted) return;
@@ -164,10 +176,7 @@ class _HomeWidgetState extends ConsumerState<HomeWidget> {
                     roundEdges: true,
                     elementColor: Theme.of(context).colorScheme.onBackground,
                     size: 70.w,
-                    data: ref
-                        .read(walletServicesProvider)
-                        .creds!
-                        .address),
+                    data: ref.read(walletServicesProvider).creds!.address),
                 TextButton(
                     onPressed: copyToClipboard,
                     child: const Text("Copy to clipboard"))
@@ -231,8 +240,7 @@ class _SendModalWidgetState extends ConsumerState<SendModalWidget> {
               Align(
                 alignment: Alignment.centerRight,
                 child: Chip(
-                  label: Text(
-                      "Balance: ${ref.watch(balanceProvider)}"),
+                  label: Text("Balance: ${ref.watch(balanceProvider)}"),
                 ),
               ),
             ],
@@ -274,8 +282,7 @@ class _SendModalWidgetState extends ConsumerState<SendModalWidget> {
                     if (amount == null) {
                       return "Please enter a valid amount";
                     }
-                    if (amount >
-                        ref.read(balanceProvider)) {
+                    if (amount > ref.read(balanceProvider)) {
                       return "Insufficient balance";
                     }
                     if (amount <= 0) {

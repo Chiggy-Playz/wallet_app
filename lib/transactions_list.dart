@@ -29,21 +29,7 @@ class _TransactionsListWidgetState
               "Transaction History",
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            FutureBuilder(
-              future:
-                  ref.watch(transactionsProvider.notifier).getTransactions(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.done) {
-                  return transactionsList();
-                }
-
-                return Center(
-                    child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 2.h),
-                  child: const CircularProgressIndicator(),
-                ));
-              },
-            ),
+            transactionsList(),
           ],
         ),
       ),
@@ -91,6 +77,14 @@ class _TransactionsListWidgetState
                         ? "Received"
                         : "Pending"),
                 style: TextStyle(color: statusColor),
+              ),
+              leading: Icon(
+                transaction.type == TransactionType.sent
+                    ? Icons.arrow_upward
+                    : (transaction.type == TransactionType.received
+                        ? Icons.arrow_downward
+                        : Icons.pending),
+                color: statusColor,
               ),
               trailing: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

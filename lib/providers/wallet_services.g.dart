@@ -36,7 +36,7 @@ final balanceProvider = NotifierProvider<Balance, double>.internal(
 );
 
 typedef _$Balance = Notifier<double>;
-String _$transactionsHash() => r'c74310f296c988a19d912e693fb6be7b6a77f30c';
+String _$transactionsHash() => r'77553b547c55e59b8c1f2f47103d9957afa275b9';
 
 /// See also [Transactions].
 @ProviderFor(Transactions)
@@ -51,5 +51,19 @@ final transactionsProvider =
 );
 
 typedef _$Transactions = Notifier<List<Transaction>>;
+String _$refreshHash() => r'c8f41f1957e656aae07e04e42e755d2d5d5ce622';
+
+/// See also [Refresh].
+@ProviderFor(Refresh)
+final refreshProvider = NotifierProvider<Refresh, bool>.internal(
+  Refresh.new,
+  name: r'refreshProvider',
+  debugGetCreateSourceHash:
+      const bool.fromEnvironment('dart.vm.product') ? null : _$refreshHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef _$Refresh = Notifier<bool>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member
