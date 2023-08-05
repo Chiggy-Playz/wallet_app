@@ -108,20 +108,18 @@ class Transactions extends _$Transactions {
     final supply = await wallet.client
         .signTransaction(credentials, transaction, chainId: 11155111);
     String transactionHash = await wallet.client.sendRawTransaction(supply);
-    state.insert(
-      0,
-      Transaction(
-          hash: transactionHash,
-          from: wallet.creds!.address,
-          to: toAdress,
-          value: value,
-          timestamp: DateTime.now(),
-          type: TransactionType.pending),
-    );
-    var transactionReceipt =
-        await wallet.client.getTransactionReceipt(transactionHash);
-    print(transactionReceipt);
-    state[0].type = TransactionType.sent;
+    state = List.from(state
+      ..insert(
+        0,
+        Transaction(
+            hash: transactionHash,
+            from: wallet.creds!.address,
+            to: toAdress,
+            value: value,
+            timestamp: DateTime.now(),
+            type: TransactionType.pending),
+      ));
+
     await ref.watch(balanceProvider.notifier).refreshBalance();
   }
 
@@ -150,7 +148,12 @@ class Transactions extends _$Transactions {
 
       // Convert and return the response as a List of Transactions
       final data = response.data['result'];
-      state = List<Transaction>.from(
+      var pendingTransactions = state
+          .where(
+            (element) => element.type == TransactionType.pending,
+          )
+          .toList();
+      var newTransactions = List<Transaction>.from(
         data.map(
           (transaction) => Transaction(
             hash: transaction['hash'],
@@ -166,6 +169,21 @@ class Transactions extends _$Transactions {
           ),
         ),
       )..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      var toRemove = <Transaction>[];
+      // If pending transaction is now confirmed, remove it from the list
+      for (var pendingTransaction in pendingTransactions) {
+        for (var newTransaction in newTransactions) {
+          if (pendingTransaction.hash == newTransaction.hash) {
+            toRemove.add(pendingTransaction);
+            break;
+          }
+        }
+      }
+
+      state = List.from(pendingTransactions
+        ..removeWhere((element) => toRemove.contains(element))
+        ..addAll(newTransactions));
     } catch (e) {
       // Rip
       print("Died lmao $e");

@@ -65,16 +65,16 @@ class _TransactionsListWidgetState
           var transaction = transactions[index];
 
           Text? subtitle;
-          var statusColor = transaction.from == address
-              ? Theme.of(context).colorScheme.error
-              : Theme.of(context).extension<CustomColors>()!.color;
+          var statusColor = transaction.type == TransactionType.pending
+              ? Colors.yellow
+              : transaction.from == address
+                  ? Theme.of(context).colorScheme.error
+                  : Theme.of(context).extension<CustomColors>()!.color;
 
-          if (transaction.type != TransactionType.pending) {
-            subtitle = Text(
-              "${transaction.formattedDate} • ${transaction.from == address ? "To" : "From"} ${shortenAddress(transaction.from == address ? transaction.to : transaction.from)}\n"
-              "Hash: ${shortenAddress(transaction.hash)}",
-            );
-          }
+          subtitle = Text(
+            "${transaction.formattedDate} • ${transaction.from == address ? "To" : "From"} ${shortenAddress(transaction.from == address ? transaction.to : transaction.from)}\n"
+            "Hash: ${shortenAddress(transaction.hash)}",
+          );
 
           return Padding(
             padding: EdgeInsets.all(2.w),
@@ -96,7 +96,10 @@ class _TransactionsListWidgetState
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    "${transaction.type == TransactionType.sent ? '-' : '+'}${transaction.value}\nSEPETH",
+                    "${{
+                      TransactionType.pending,
+                      TransactionType.sent
+                    }.contains(transaction.type) ? '-' : '+'}${transaction.value}\nSEPETH",
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall!
@@ -105,7 +108,7 @@ class _TransactionsListWidgetState
                 ],
               ),
               subtitle: subtitle,
-              isThreeLine: subtitle != null,
+              isThreeLine: true,
             ),
           );
         }));
